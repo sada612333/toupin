@@ -27,12 +27,18 @@ class ScreenShareViewModel : ViewModel() {
     private val _state = MutableStateFlow<ScreenShareState>(ScreenShareState.Idle)
     val state: StateFlow<ScreenShareState> = _state
 
-    fun startSharing(context: Context) {
+    fun startSharing(context: Context, resultCode: Int, data: Intent?) {
         Log.d(TAG, "startSharing triggered state change")
+        Log.d(TAG, "Result code: $resultCode")
+        Log.d(TAG, "Data: $data")
+        
         _state.value = ScreenShareState.Connecting
         // 启动前台服务
         try {
             val intent = Intent(context, ScreenShareService::class.java)
+            intent.putExtra("resultCode", resultCode)
+            intent.putExtra("data", data)
+            Log.d(TAG, "Starting foreground service with intent: $intent")
             context.startForegroundService(intent)
             Log.d(TAG, "Foreground service started")
         } catch (e: Exception) {
