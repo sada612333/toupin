@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "com.lys.toupin"
     compileSdk = 36
+    ndkVersion = "28.0.12674087"
 
     defaultConfig {
         applicationId = "com.lys.toupin"
@@ -27,6 +28,16 @@ android {
             )
         }
     }
+    packaging {
+        jniLibs {
+            // 关键：设置 16KB 对齐（16384 字节 = 16KB）
+            //pageSizeAlignment = 16384
+            // 可选：清理无用的 SO 库，减少 APK 体积
+            //useLegacyPackaging = false
+        }
+    }
+
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -53,6 +64,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.monitor)
+    implementation(libs.androidx.webrtc)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

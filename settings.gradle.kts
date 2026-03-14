@@ -9,13 +9,29 @@ pluginManagement {
         }
         mavenCentral()
         gradlePluginPortal()
+
+        // 阿里云镜像
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
     }
 }
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
         mavenCentral()
+
+        // 阿里云镜像（优先）
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+
+
+        // 腾讯云镜像（备选）
+        maven { url = uri("https://mirrors.cloud.tencent.com/Android/maven2/") }
+
+        // 添加社区维护的 WebRTC 仓库
+        maven { url = uri("https://raw.githubusercontent.com/alexgreench/google-webrtc/master") }
     }
 }
 

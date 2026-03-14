@@ -17,6 +17,13 @@ import android.util.Log
 import android.view.SurfaceView
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
+import org.webrtc.EglBase
+import org.webrtc.PeerConnectionFactory
+import org.webrtc.ScreenCapturerAndroid
+import org.webrtc.SurfaceTextureHelper
+import org.webrtc.SurfaceViewRenderer
+import org.webrtc.VideoSource
+import org.webrtc.VideoTrack
 
 class ScreenShareService : Service() {
 
@@ -26,10 +33,20 @@ class ScreenShareService : Service() {
         private const val NOTIFICATION_ID = 1
     }
 
-    private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var surfaceView: SurfaceView? = null
     private var windowManager: WindowManager? = null
+    
+    // WebRTC components
+    private var peerConnectionFactory: PeerConnectionFactory? = null
+    private var rootEglBase: EglBase? = null
+    private var videoSource: VideoSource? = null
+    private var videoTrack: VideoTrack? = null
+    private var screenCapturer: ScreenCapturerAndroid? = null
+    private var surfaceViewRenderer: SurfaceViewRenderer? = null
+    private var surfaceTextureHelper: SurfaceTextureHelper? = null
+    private var isScreenCapturerRunning: Boolean = false
+
 
     override fun onBind(intent: Intent?): IBinder? {
         Log.d(TAG, "onBind called")
@@ -40,6 +57,67 @@ class ScreenShareService : Service() {
         super.onCreate()
         Log.d(TAG, "onCreate called")
         createNotificationChannel()
+    }
+    
+    private fun initWebRTC() {
+        Log.d(TAG, "Initializing WebRTC components")
+        // 初始化EGL上下文
+        rootEglBase = EglBase.create()
+        // 初始化PeerConnectionFactory
+        val initializationOptions = PeerConnectionFactory.InitializationOptions.builder(this)
+            .setEnableInternalTracer(true)
+            .createInitializationOptions()
+        PeerConnectionFactory.initialize(initializationOptions)
+        // 创建PeerConnectionFactory
+        val peerConnectionFactoryBuilder = PeerConnectionFactory.builder()
+        peerConnectionFactory = peerConnectionFactoryBuilder.createPeerConnectionFactory()
+        // 创建SurfaceTextureHelper
+        surfaceTextureHelper = SurfaceTextureHelper.create("ScreenCaptureThread", rootEglBase?.eglBaseContext)
+        // 创建VideoSource和VideoTrack
+        videoSource = peerConnectionFactory?.createVideoSource(false)
+        videoTrack = peerConnectionFactory?.createVideoTrack("ARDAMSv0", videoSource)
+        Log.d(TAG, "WebRTC components initialized successfully")
+    }
+
+    private fun createScreenCapturer(data: Intent) {
+        Log.d(TAG, "Creating ScreenCapturerAndroid")
+
+        screenCapturer = ScreenCapturerAndroid(
+            data,
+            object : MediaProjection.Callback() {
+                override fun onStop() {
+                    Log.d(TAG, "MediaProjection stopped in ScreenCapturer")
+                }
+            })
+
+        Log.d(TAG, "ScreenCapturerAndroid created: $screenCapturer")
+
+        // 初始化并启动捕获器
+        try {
+            screenCapturer?.initialize(
+                surfaceTextureHelper,
+                applicationContext,
+                videoSource?.capturerObserver
+            )
+            Log.d(TAG, "ScreenCapturer initialized")
+
+            // 获取屏幕尺寸
+            val displayMetrics = resources.displayMetrics
+            val screenWidth = displayMetrics.widthPixels
+            val screenHeight = displayMetrics.heightPixels
+
+            screenCapturer?.startCapture(
+                screenWidth,
+                screenHeight,
+                30 // 帧率
+            )
+            Log.d(TAG, "ScreenCapturer started with resolution: ${screenWidth}x${screenHeight}")
+            isScreenCapturerRunning = true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing ScreenCapturer: ${e.message}")
+            e.printStackTrace()
+            isScreenCapturerRunning = false
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -102,82 +180,61 @@ class ScreenShareService : Service() {
 
     private fun initMediaProjection(resultCode: Int, data: Intent) {
         Log.d(TAG, "Initializing MediaProjection")
-        val mediaProjectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
         
-        // 注册 MediaProjection 回调
-        mediaProjection?.registerCallback(object : MediaProjection.Callback() {
-            override fun onStop() {
-                Log.d(TAG, "MediaProjection stopped")
-                stopScreenCapture()
-            }
-        }, android.os.Handler(android.os.Looper.getMainLooper()))
+        // 初始化WebRTC组件
+        initWebRTC()
         
-        // 创建 SurfaceView 用于预览
-        createPreviewSurface()
+        // 创建ScreenCapturerAndroid（它会自己处理MediaProjection）
+        createScreenCapturer(data)
+        
+        // 创建 SurfaceViewRenderer 用于预览
+        createPreview()
     }
 
-    private fun createPreviewSurface() {
-        Log.d(TAG, "Creating preview SurfaceView")
+    private fun createPreview() {
+        Log.d(TAG, "Creating preview SurfaceViewRenderer")
         
         // 检查悬浮窗权限
-        Log.d(TAG, "Checking SYSTEM_ALERT_WINDOW permission")
         if (!android.provider.Settings.canDrawOverlays(this)) {
             Log.e(TAG, "No SYSTEM_ALERT_WINDOW permission")
             return
         }
         Log.d(TAG, "SYSTEM_ALERT_WINDOW permission granted")
 
-        // 创建 SurfaceView
-        Log.d(TAG, "Creating SurfaceView instance")
-        surfaceView = SurfaceView(this)
+        // 创建SurfaceViewRenderer
+        surfaceViewRenderer = SurfaceViewRenderer(this)
+        
         // 设置固定大小（屏幕宽高的1/3）
         val displayMetrics = resources.displayMetrics
         val screenWidth = displayMetrics.widthPixels
         val screenHeight = displayMetrics.heightPixels
         val width = (screenWidth / 3).toInt()
         val height = (screenHeight / 3).toInt()
-        Log.d(TAG, "SurfaceView size set: width=$width, height=$height (1/3 of screen size)")
-        // 为 SurfaceView 添加边框（去掉背景色，只保留边框）
+        Log.d(TAG, "SurfaceViewRenderer size set: width=$width, height=$height (1/3 of screen size)")
+        
+        // 为SurfaceViewRenderer添加边框
         val borderDrawable = android.graphics.drawable.ShapeDrawable()
         borderDrawable.shape = android.graphics.drawable.shapes.RectShape()
         borderDrawable.paint.color = android.graphics.Color.WHITE
         borderDrawable.paint.style = android.graphics.Paint.Style.STROKE
         borderDrawable.paint.strokeWidth = 2f
-        surfaceView?.background = borderDrawable
-        // 设置可见性
-        surfaceView?.visibility = android.view.View.VISIBLE
-        Log.d(TAG, "SurfaceView created: $surfaceView")
+        surfaceViewRenderer?.setBackground(borderDrawable)
         
-        // 添加 SurfaceHolder.Callback 监听 Surface 状态
-        surfaceView?.holder?.addCallback(object : android.view.SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: android.view.SurfaceHolder) {
-                Log.d(TAG, "Surface created: ${holder.surface}")
-                // Surface 创建完成后，创建 VirtualDisplay
-                try {
-                    createVirtualDisplay()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error creating VirtualDisplay: ${e.message}")
-                    e.printStackTrace()
-                }
-            }
-
-            override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, width: Int, height: Int) {
-                Log.d(TAG, "Surface changed: format=$format, width=$width, height=$height")
-            }
-
-            override fun surfaceDestroyed(holder: android.view.SurfaceHolder) {
-                Log.d(TAG, "Surface destroyed")
-            }
-        })
+        // 初始化SurfaceViewRenderer
+        surfaceViewRenderer?.init(
+            rootEglBase?.eglBaseContext,
+            null // 渲染回调
+        )
         
-        // 获取 WindowManager
-        Log.d(TAG, "Getting WindowManager")
+        // 将VideoTrack添加到SurfaceViewRenderer
+        videoTrack?.addSink(surfaceViewRenderer)
+        Log.d(TAG, "VideoTrack added to SurfaceViewRenderer")
+        
+        // 获取WindowManager
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         Log.d(TAG, "WindowManager obtained: $windowManager")
         
-        // 设置 SurfaceView 布局参数
-        Log.d(TAG, "Creating WindowManager.LayoutParams")
+        // 设置布局参数
         val layoutParams = WindowManager.LayoutParams(
             width, // 使用计算好的宽度
             height, // 使用计算好的高度
@@ -192,96 +249,34 @@ class ScreenShareService : Service() {
         layoutParams.y = 10
         Log.d(TAG, "Layout params set: $layoutParams")
         
-        // 添加 SurfaceView 到窗口
+        // 添加SurfaceViewRenderer到窗口
         try {
-            Log.d(TAG, "Attempting to add SurfaceView to window")
-            windowManager?.addView(surfaceView, layoutParams)
-            Log.d(TAG, "Preview SurfaceView added to window")
+            Log.d(TAG, "Attempting to add SurfaceViewRenderer to window")
+            windowManager?.addView(surfaceViewRenderer, layoutParams)
+            Log.d(TAG, "Preview SurfaceViewRenderer added to window")
         } catch (e: Exception) {
-            Log.e(TAG, "Error adding SurfaceView: ${e.message}")
+            Log.e(TAG, "Error adding SurfaceViewRenderer: ${e.message}")
             e.printStackTrace()
         }
     }
 
-    private fun createVirtualDisplay() {
-        Log.d(TAG, "Creating VirtualDisplay")
-        
-        // 检查 SurfaceView 是否初始化
-        if (surfaceView == null) {
-            val errorMsg = "SurfaceView is not initialized"
-            Log.e(TAG, errorMsg)
-            throw IllegalStateException(errorMsg)
-        }
-        Log.d(TAG, "surfaceView: $surfaceView")
-        
-        // 检查 SurfaceHolder 是否有效
-        val holder = surfaceView?.holder
-        if (holder == null) {
-            val errorMsg = "SurfaceHolder is null"
-            Log.e(TAG, errorMsg)
-            throw IllegalStateException(errorMsg)
-        }
-        Log.d(TAG, "surfaceView?.holder: $holder")
-        
-        // 检查 Surface 是否有效
-        val surface = holder.surface
-        if (surface == null || !surface.isValid) {
-            val errorMsg = "Surface is not valid: $surface"
-            Log.e(TAG, errorMsg)
-            throw IllegalStateException(errorMsg)
-        }
-        Log.d(TAG, "surface: $surface")
-        
-        // 检查 MediaProjection 是否初始化
-        if (mediaProjection == null) {
-            val errorMsg = "MediaProjection is not initialized"
-            Log.e(TAG, errorMsg)
-            throw IllegalStateException(errorMsg)
-        }
-        Log.d(TAG, "mediaProjection: $mediaProjection")
-        
-        // 获取 SurfaceView 的实际宽度和高度
-        val width = surfaceView?.width ?: 0
-        val height = surfaceView?.height ?: 0
-        Log.d(TAG, "Using SurfaceView actual size: width=$width, height=$height")
-        
-        // 创建 VirtualDisplay，使用 SurfaceView 的实际尺寸
-        virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "ScreenShare",
-            width, // 使用 SurfaceView 实际宽度
-            height, // 使用 SurfaceView 实际高度
-            resources.displayMetrics.densityDpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            surface,
-            object : VirtualDisplay.Callback() {
-                override fun onPaused() {
-                    Log.d(TAG, "VirtualDisplay paused")
-                }
 
-                override fun onResumed() {
-                    Log.d(TAG, "VirtualDisplay resumed")
-                }
-
-                override fun onStopped() {
-                    Log.d(TAG, "VirtualDisplay stopped")
-                }
-            },
-            null
-        )
-        Log.d(TAG, "VirtualDisplay created: $virtualDisplay")
-        
-        if (virtualDisplay == null) {
-            val errorMsg = "Failed to create VirtualDisplay"
-            Log.e(TAG, errorMsg)
-            throw IllegalStateException(errorMsg)
-        }
-    }
 
     private fun stopScreenCapture() {
         Log.d(TAG, "Stopping screen capture")
-        virtualDisplay?.release()
-        mediaProjection?.stop()
-        // 移除 SurfaceView
+
+        // 先移除 SurfaceViewRenderer，避免在停止捕获时出现显示问题
+        if (surfaceViewRenderer != null && windowManager != null) {
+            try {
+                windowManager?.removeView(surfaceViewRenderer)
+                Log.d(TAG, "Preview SurfaceViewRenderer removed from window")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing SurfaceViewRenderer: ${e.message}")
+            }
+            surfaceViewRenderer = null
+        }
+
+        // 移除旧的 SurfaceView（如果存在）
         if (surfaceView != null && windowManager != null) {
             try {
                 windowManager?.removeView(surfaceView)
@@ -289,7 +284,86 @@ class ScreenShareService : Service() {
             } catch (e: Exception) {
                 Log.e(TAG, "Error removing SurfaceView: ${e.message}")
             }
+            surfaceView = null
         }
+
+        // 停止并释放 ScreenCapturer，只在捕获运行时才调用 stopCapture
+        screenCapturer?.let { capturer ->
+            try {
+                if (isScreenCapturerRunning) {
+                    capturer.stopCapture()
+                    Log.d(TAG, "ScreenCapturer stopped")
+                    isScreenCapturerRunning = false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping ScreenCapturer: ${e.message}")
+                e.printStackTrace()
+            } finally {
+                // 无论 stopCapture 是否成功，都要调用 dispose
+                try {
+                    capturer.dispose()
+                    Log.d(TAG, "ScreenCapturer disposed")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error disposing ScreenCapturer: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+        }
+        screenCapturer = null
+
+        // 释放 VirtualDisplay
+        try {
+            virtualDisplay?.release()
+            Log.d(TAG, "VirtualDisplay released")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing VirtualDisplay: ${e.message}")
+        }
+        virtualDisplay = null
+
+        // MediaProjection由ScreenCapturerAndroid管理，不需要在这里释放
+
+        // 释放 WebRTC 资源，按相反顺序释放
+        try {
+            surfaceTextureHelper?.dispose()
+            Log.d(TAG, "SurfaceTextureHelper disposed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing SurfaceTextureHelper: ${e.message}")
+        }
+        surfaceTextureHelper = null
+        
+        try {
+            videoTrack?.dispose()
+            Log.d(TAG, "VideoTrack disposed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing VideoTrack: ${e.message}")
+        }
+        videoTrack = null
+
+        try {
+            videoSource?.dispose()
+            Log.d(TAG, "VideoSource disposed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing VideoSource: ${e.message}")
+        }
+        videoSource = null
+
+        try {
+            peerConnectionFactory?.dispose()
+            Log.d(TAG, "PeerConnectionFactory disposed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing PeerConnectionFactory: ${e.message}")
+        }
+        peerConnectionFactory = null
+
+        try {
+            rootEglBase?.release()
+            Log.d(TAG, "EglBase released")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing EglBase: ${e.message}")
+        }
+        rootEglBase = null
+
+        Log.d(TAG, "All screen capture resources released")
     }
 
     private fun createNotificationChannel() {
