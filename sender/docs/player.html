@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>屏幕共享播放器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%;
+            margin: 20px 0;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #remoteVideo {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #connectBtn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #connectBtn:hover {
+            background-color: #45a049;
+        }
+        #disconnectBtn {
+            background-color: #f44336;
+            color: white;
+        }
+        #disconnectBtn:hover {
+            background-color: #da190b;
+        }
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.connecting {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>屏幕共享播放器</h1>
+        
+        <div class="video-container">
+            <video id="remoteVideo" autoplay playsinline muted></video>
+        </div>
+        
+        <div class="controls">
+            <button id="connectBtn">连接</button>
+            <button id="disconnectBtn" disabled>断开</button>
+        </div>
+        
+        <div id="status" class="status disconnected">未连接</div>
+    </div>
+    
+    <script>
+        // 信令服务器地址
+        const signalingUrl = 'ws://localhost:8080';
+
+        // 时间戳日志
+        function getTimestamp() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
+        }
+
+        const originalLog = console.log;
+        const originalError = console.error;
+
+        console.log = function(...args) {
+            originalLog(`[${getTimestamp()}]`, ...args);
+        };
+
+        console.error = function(...args) {
+            originalError(`[${getTimestamp()}]`, ...args);
+        };
+
+        console.log('信令服务器地址:', signalingUrl);
+        
+        // WebRTC 变量
+        let peerConnection = null;
+        let webSocket = null;
+        let remoteVideo = document.getElementById('remoteVideo');
+        let statusElement = document.getElementById('status');
+        let connectBtn = document.getElementById('connectBtn');
+        let disconnectBtn = document.getElementById('disconnectBtn');
+        
+        const deviceId = 'browser_' + Math.random().toString(36).substring(2, 15);
+        
+        let retryCount = 0;
+        const maxRetries = 3;
+        let connectionTimeout;
+        let heartbeatInterval;
+        
+        // 按钮事件
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        
+        // 连接
+        function connect() {
+            updateStatus('connecting', '连接中...');
+            connectBtn.disabled = true;
+            
+            console.log('尝试连接到信令服务器:', signalingUrl);
+            webSocket = new WebSocket(signalingUrl);
+            
+            webSocket.onopen = () => {
+                console.log('WebSocket连接已建立');
+                updateStatus('connected', 'WebSocket连接已建立');
+                retryCount = 0;
+                
+                setTimeout(() => {
+                    // 使用安卓端期望的消息格式
+                    const joinMessage = { 
+                        type: 'join', 
+                        data: deviceId,
+                        from: deviceId,
+                        to: 'android-server'
+                    };
+                    console.log('发送加入消息:', joinMessage);
+                    webSocket.send(JSON.stringify(joinMessage));
+                    
+                    createPeerConnection();
+                    startHeartbeat();
+                }, 500);
+            };
+            
+            webSocket.onmessage = (event) => {
+                console.log('收到消息:', event.data);
+                handleSignalingMessage(event.data);
+            };
+            
+            webSocket.onclose = (event) => {
+                console.log('WebSocket连接已关闭:', event.code);
+                clearTimeout(connectionTimeout);
+                clearInterval(heartbeatInterval);
+                updateStatus('disconnected', '未连接');
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            };
+            
+            webSocket.onerror = (error) => {
+                console.error('WebSocket错误:', error);
+                retryCount++;
+                if (retryCount < maxRetries) {
+                    updateStatus('connecting', `重试连接(${retryCount}/${maxRetries})`);
+                    setTimeout(connect, 2000);
+                } else {
+                    updateStatus('disconnected', '连接失败');
+                    connectBtn.disabled = false;
+                }
+            };
+        }
+        
+        // 创建 WebRTC 连接（核心修复）
+        function createPeerConnection() {
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun.miwifi.com:3478' },
+                { urls: 'stun:stun.cloudflare.com:3478' }
+            ],
+            iceCandidatePoolSize: 10,
+            iceTransportPolicy: 'all',
+            // IPv6可能造成连接问题，优先使用IPv4
+            iceCandidateTypes: 'host',
+            // 强制使用IPv4连接
+            bundlePolicy: 'max-compat'
+        };
+            
+            console.log('创建 PeerConnection, ICE 配置:', configuration);
+            peerConnection = new RTCPeerConnection(configuration);
+            
+            // 监听远程视频流（关键修复）
+            peerConnection.ontrack = (event) => {
+                console.log('收到远程视频流');
+                if (event.streams && event.streams[0]) {
+                    remoteVideo.srcObject = event.streams[0];
+                    remoteVideo.play().catch(err => console.warn('视频自动播放限制:', err));
+                }
+            };
+            
+            // 发送 ICE 候选
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    console.log('生成 ICE 候选:', event.candidate);
+                    const iceMessage = {
+                        type: 'ice-candidate',
+                        candidate: event.candidate.candidate,
+                        sdpMid: event.candidate.sdpMid,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex,
+                        from: deviceId,
+                        to: 'android-server'
+                    };
+                    console.log('发送 ICE 候选消息:', iceMessage);
+                    webSocket.send(JSON.stringify(iceMessage));
+                } else {
+                    console.log('ICE 候选收集完成');
+                }
+            };
+
+            // ICE 收集状态监控
+            peerConnection.onicegatheringstatechange = () => {
+                console.log('ICE 收集状态:', peerConnection.iceGatheringState);
+            };
+
+            // ICE 状态监控
+            peerConnection.oniceconnectionstatechange = () => {
+                const state = peerConnection.iceConnectionState;
+                console.log('ICE 状态:', state);
+                if (state === 'connected' || state === 'completed') {
+                    updateStatus('connected', '✅ WebRTC 连接成功');
+                    disconnectBtn.disabled = false;
+                    // 连接成功后的统计信息检查
+                    setTimeout(checkConnectionStats, 1000);
+                } else if (state === 'failed') {
+                    console.error('ICE 连接失败');
+                    updateStatus('disconnected', '❌ ICE 连接失败');
+                }
+            };
+            
+            // 连接状态
+            peerConnection.onconnectionstatechange = () => {
+                console.log('WebRTC 连接状态:', peerConnection.connectionState);
+            };
+            
+            console.log('PeerConnection 创建成功，等待安卓 offer...');
+        }
+        
+        // 处理信令
+        function handleSignalingMessage(message) {
+            const data = JSON.parse(message);
+            console.log('解析消息:', data);
+            
+            // 检查消息是否是发给当前客户端的
+            if (data.to && data.to !== deviceId && data.to !== 'receiver') return;
+            if (data.from === deviceId) return;
+            
+            switch (data.type) {
+                case 'offer': handleOffer(data); break;
+                case 'answer': handleAnswer(data); break;
+                case 'ice-candidate': handleIceCandidate(data); break;
+                case 'heartbeat': console.log('收到心跳'); break;
+            }
+        }
+        
+        // 处理 Offer
+        async function handleOffer(data) {
+            console.log('收到 offer');
+            
+            // 关键修复：防止重复处理相同的offer
+            if (peerConnection.signalingState !== 'stable') {
+                console.log('跳过重复的offer，当前状态:', peerConnection.signalingState);
+                return;
+            }
+            
+            try {
+                // 先设置远程描述（进入 have-remote-offer 状态）
+                const offer = new RTCSessionDescription({
+                    type: 'offer',
+                    sdp: data.sdp
+                });
+                await peerConnection.setRemoteDescription(offer);
+                console.log('远程 offer 设置成功，当前状态:', peerConnection.signalingState);
+                
+                // 等待状态稳定后再创建 answer
+                if (peerConnection.signalingState === 'have-remote-offer') {
+                    await createAnswer();
+                } else {
+                    console.error('错误状态，无法创建 answer:', peerConnection.signalingState);
+                }
+            } catch (e) {
+                console.error('设置 offer 失败:', e);
+            }
+        }
+        
+        // 创建 Answer（修复媒体方向问题）
+        async function createAnswer() {
+            const constraints = {
+                offerToReceiveAudio: false,
+                offerToReceiveVideo: true
+            };
+
+            try {
+                const answer = await peerConnection.createAnswer(constraints);
+                
+                // 关键修复：强制将 inactive 改为 recvonly
+                let fixedSdp = answer.sdp.replace(/a=inactive/g, 'a=recvonly');
+                
+                // 创建修改后的 answer
+                const fixedAnswer = new RTCSessionDescription({
+                    type: 'answer',
+                    sdp: fixedSdp
+                });
+                
+                // 设置修改后的本地描述
+                await peerConnection.setLocalDescription(fixedAnswer);
+                
+                console.log('发送 Answer, SDP 包含 recvonly');
+                webSocket.send(JSON.stringify({
+                    type: 'answer',
+                    sdp: fixedSdp,
+                    from: deviceId,
+                    to: 'android-server'
+                }));
+            } catch (e) {
+                console.error('创建 Answer 失败:', e);
+            }
+        }
+        
+        // 处理 Answer
+        async function handleAnswer(data) {
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription({
+                    type: 'answer',
+                    sdp: data.sdp
+                }));
+            } catch (e) {
+                console.error('设置 answer 失败:', e);
+            }
+        }
+        
+        // 处理 ICE
+        async function handleIceCandidate(data) {
+            try {
+                const candidate = new RTCIceCandidate({
+                    candidate: data.candidate,
+                    sdpMid: data.sdpMid,
+                    sdpMLineIndex: data.sdpMLineIndex
+                });
+                await peerConnection.addIceCandidate(candidate);
+            } catch (e) {}
+        }
+        
+        // 心跳（3秒，防止超时断开）
+        function startHeartbeat() {
+            heartbeatInterval = setInterval(() => {
+                if (webSocket.readyState === WebSocket.OPEN) {
+                    webSocket.send(JSON.stringify({ type: 'heartbeat', device: deviceId }));
+                }
+            }, 3000);
+        }
+        
+        // 断开
+        function disconnect() {
+            clearInterval(heartbeatInterval);
+            if (peerConnection) { peerConnection.close(); peerConnection = null; }
+            if (webSocket) { webSocket.close(); webSocket = null; }
+            remoteVideo.srcObject = null;
+            updateStatus('disconnected', '未连接');
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+        }
+        
+        function updateStatus(status, message) {
+            statusElement.textContent = message;
+            statusElement.className = `status ${status}`;
+        }
+
+        // 检查连接统计信息
+        async function checkConnectionStats() {
+            if (!peerConnection) return;
+            
+            try {
+                const stats = await peerConnection.getStats();
+                let hasVideoStats = false;
+                let hasSuccessfulCandidate = false;
+                
+                stats.forEach(report => {
+                    switch (report.type) {
+                        case 'candidate-pair':
+                            if (report.state === 'succeeded') {
+                                console.log('✅ 候选对连接成功:', {
+                                    localCandidateId: report.localCandidateId,
+                                    remoteCandidateId: report.remoteCandidateId,
+                                    bytesSent: report.bytesSent,
+                                    bytesReceived: report.bytesReceived
+                                });
+                                hasSuccessfulCandidate = true;
+                            }
+                            break;
+                        case 'track':
+                            if (report.kind === 'video') {
+                                console.log('✅ 视频轨道统计:', {
+                                    trackIdentifier: report.trackIdentifier,
+                                    framesReceived: report.framesReceived,
+                                    framesDecoded: report.framesDecoded,
+                                    framesDropped: report.framesDropped
+                                });
+                                hasVideoStats = true;
+                            }
+                            break;
+                    }
+                });
+                
+                if (hasSuccessfulCandidate && hasVideoStats) {
+                    console.log('🎉 WebRTC连接验证成功：视频流正在传输');
+                } else {
+                    console.log('⚠️ 连接验证不完全，等待更多数据...');
+                }
+                
+            } catch (error) {
+                console.error('获取统计信息失败:', error);
+            }
+        }
+        
+        // 开始连接监控
+        let statsInterval;
+        function startStatsMonitoring() {
+            statsInterval = setInterval(() => {
+                if (peerConnection && peerConnection.iceConnectionState === 'connected') {
+                    checkConnectionStats();
+                }
+            }, 5000);
+        }
+        
+        window.onload = connect;
+    </script>
+</body>
+</html>
