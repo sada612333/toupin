@@ -89,14 +89,11 @@ class WebRTCPeerManager {
             try {
                 // 配置 ICE 服务器（可根据需要添加STUN/TURN服务器）
                 val iceServers = mutableListOf<PeerConnection.IceServer>().apply {
-                    // 添加Google的公共STUN服务器
+                    add(PeerConnection.IceServer.builder("stun:stun.miwifi.com:3478").createIceServer())
+                    add(PeerConnection.IceServer.builder("stun:stun.cloudflare.com:3478").createIceServer())
                     add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer())
                     add(PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer())
-                    // 可根据需要添加TURN服务器
-                    // add(PeerConnection.IceServer.builder("turn:your-turn-server.com").
-                    //     setUsername("username").
-                    //     setPassword("password").
-                    //     createIceServer())
+                    add(PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer())
                 }
                 
                 val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
@@ -110,7 +107,7 @@ class WebRTCPeerManager {
                     // 启用更强的加密
                     keyType = PeerConnection.KeyType.ECDSA
                     // 设置候选收集策略
-                    iceCandidatePoolSize = 1
+                    iceCandidatePoolSize = 2
                 }
                 
                 // 创建对等连接
