@@ -7,10 +7,10 @@
       </SelectionState>
       <SelectionState runConfigName="sender">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-03-14T13:58:31.563609200Z">
+        <DropdownSelection timestamp="2026-04-15T15:39:38.608877900Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\29535\.android\avd\Resizable_Experimental.avd" />
+              <DeviceId pluginId="PhysicalDevice" identifier="serial=ATLSVB4711000897" />
             </handle>
           </Target>
         </DropdownSelection>
@@ -25,6 +25,17 @@
           <Target type="DEFAULT_BOOT">
             <handle>
               <DeviceId pluginId="PhysicalDevice" identifier="serial=ATLSVB4711000897" />
+            </handle>
+          </Target>
+        </DropdownSelection>
+        <DialogSelection />
+      </SelectionState>
+      <SelectionState runConfigName="receiver">
+        <option name="selectionMode" value="DROPDOWN" />
+        <DropdownSelection timestamp="2026-04-15T15:03:25.714228400Z">
+          <Target type="DEFAULT_BOOT">
+            <handle>
+              <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\29535\.android\avd\Resizable_Experimental.avd" />
             </handle>
           </Target>
         </DropdownSelection>

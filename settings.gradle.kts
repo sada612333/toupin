@@ -37,4 +37,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "toupin"
 include(":sender")
+include(":receiver")
  
