@@ -12,7 +12,7 @@ import com.google.gson.Gson
 /**
  * 嵌入式WebSocket信令服务器，处理客户端间通信
  */
-class WebSocketSignalingServer(private val port: Int = 8080) : NanoWSD(port) {
+class WebSocketSignalingServer(private val host: String = "0.0.0.0", private val port: Int = 8080) : NanoWSD(host, port) {
     companion object {
         private const val TAG = "SignalingServer"
     }
@@ -110,6 +110,10 @@ class WebSocketSignalingServer(private val port: Int = 8080) : NanoWSD(port) {
                             }
                         }
                     }
+                    "heartbeat" -> {
+                        // 处理心跳消息，直接忽略，保持连接活跃
+                        Log.d(TAG, "💓 收到心跳消息 from $fromClientId")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing message: ${e.message}")
@@ -203,7 +207,7 @@ class WebSocketSignalingServer(private val port: Int = 8080) : NanoWSD(port) {
     fun startServer(): Boolean {
         try {
             start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
-            Log.d(TAG, "Signaling server started on port $port")
+            Log.d(TAG, "Signaling server started on $host:$port")
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Error starting signaling server: ${e.message}")

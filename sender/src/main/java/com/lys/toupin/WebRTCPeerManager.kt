@@ -142,8 +142,33 @@ class WebRTCPeerManager {
                         }
                         
                         override fun onIceCandidate(candidate: IceCandidate) {
-                            Log.d(TAG, "Local PeerConnection ICE candidate: $candidate")
-                            peerManagerListener?.onIceCandidate(candidate)
+                            Log.d(TAG, "Local PeerConnection ICE candidate: ${candidate.sdp}")
+                            
+                            // 优化ICE候选发送：避免密集发送导致连接中断
+                            executor.execute {
+                                try {
+                                    // 根据候选类型进行不同的延迟策略
+                                    val candidateType = if (candidate.sdp.contains("typ host")) "host"
+                                    else if (candidate.sdp.contains("typ srflx")) "srflx"
+                                    else if (candidate.sdp.contains("typ relay")) "relay"
+                                    else "other"
+                                    
+                                    Log.d(TAG, "🧊 ICE候选类型: $candidateType, 长度: ${candidate.sdp.length}")
+                                    
+                                    // 根据不同候选类型设置不同延迟
+                                    val delayMs = when (candidateType) {
+                                        "srflx" -> 20L  // 服务器反射候选较多，增加延迟
+                                        "host" -> 5L    // 主机候选较少，短延迟
+                                        else -> 10L     // 其他候选中等延迟
+                                    }
+                                    
+                                    Thread.sleep(delayMs)
+                                    peerManagerListener?.onIceCandidate(candidate)
+                                    
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ ICE候选处理异常: ${e.message}")
+                                }
+                            }
                         }
                         
                         override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) {

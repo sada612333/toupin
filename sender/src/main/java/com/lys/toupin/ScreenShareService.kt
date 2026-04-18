@@ -191,6 +191,14 @@ class ScreenShareService : Service() {
         Log.d(TAG, "Foreground service stopped")
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.d(TAG, "onTaskRemoved called - cleaning up resources")
+        stopScreenCapture()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     private fun initMediaProjection(_resultCode: Int, data: Intent) {
         Log.d(TAG, "Initializing MediaProjection")
 
@@ -290,8 +298,8 @@ class ScreenShareService : Service() {
         try {
             val config = signalingConfig ?: return
 
-            // 启动本地WebSocket信令服务器
-            webSocketSignalingServer = WebSocketSignalingServer(config.getServerPort())
+            // 启动本地WebSocket信令服务器，绑定到所有网络接口
+            webSocketSignalingServer = WebSocketSignalingServer(config.getServerHost(), config.getServerPort())
 
             // 设置信令监听器
             webSocketSignalingServer?.setSignalingListener(object : WebSocketSignalingServer.SignalingListener {

@@ -13,11 +13,13 @@ class SignalingConfig(private val context: Context) {
         private const val KEY_TARGET_CLIENT_ID = "target_client_id"
         private const val KEY_SERVER_URL = "server_url"
         private const val KEY_SERVER_PORT = "server_port"
+        private const val KEY_SERVER_HOST = "server_host"
         private const val KEY_USE_LOCAL_SERVER = "use_local_server"
         
         // 默认配置
         private const val DEFAULT_SERVER_URL = "ws://localhost"
         private const val DEFAULT_SERVER_PORT = 8080
+        private const val DEFAULT_SERVER_HOST = "0.0.0.0"
     }
     
     private val sharedPreferences: SharedPreferences = 
@@ -82,6 +84,20 @@ class SignalingConfig(private val context: Context) {
      */
     fun setServerPort(port: Int) {
         sharedPreferences.edit().putInt(KEY_SERVER_PORT, port).apply()
+    }
+    
+    /**
+     * 获取服务器主机地址
+     */
+    fun getServerHost(): String {
+        return sharedPreferences.getString(KEY_SERVER_HOST, DEFAULT_SERVER_HOST) ?: DEFAULT_SERVER_HOST
+    }
+    
+    /**
+     * 设置服务器主机地址
+     */
+    fun setServerHost(host: String) {
+        sharedPreferences.edit().putString(KEY_SERVER_HOST, host).apply()
     }
     
     /**
