@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">接收端</string>
+    <string name="connection_status">连接状态: %s</string>
+    <string name="status_disconnected">未连接</string>
+    <string name="status_connecting">连接中...</string>
+    <string name="status_connected">已连接</string>
+    <string name="start_listening">开始监听</string>
+    <string name="stop_listening">停止监听</string>
+</resources>
