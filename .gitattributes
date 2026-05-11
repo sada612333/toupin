@@ -1,0 +1,27 @@
+# .gitattributes - 代码语言识别配置
+
+# Kotlin
+*.kt     linguist-language=Kotlin
+*.kts    linguist-language=Kotlin
+
+# XML
+*.xml    linguist-language=XML
+
+# Markdown
+*.md     linguist-language=Markdown
+
+# Gradle
+*.gradle linguist-language=Groovy
+*.gradle.kts linguist-language=Kotlin
+
+# 资源文件
+*.json   linguist-language=JSON
+*.yml    linguist-language=YAML
+*.yaml   linguist-language=YAML
+
+# 二进制文件
+*.png    linguist-language=Binary
+*.jpg    linguist-language=Binary
+*.jpeg   linguist-language=Binary
+*.webp   linguist-language=Binary
+*.apk    linguist-language=Binary

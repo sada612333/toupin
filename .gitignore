@@ -14,3 +14,18 @@
 .cxx
 local.properties
 .idea/*
+
+# Android build outputs
+*/build/
+*/build/outputs/
+*/build/intermediates/
+*/build/tmp/
+*/build/kotlin/
+*.apk
+
+# ProGuard
+*.pro
+*.bak
+
+# Gradle daemon
+gradle/gradle-daemon-jvm.properties
