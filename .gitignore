@@ -1,0 +1,63 @@
+# Gradle
+.gradle/
+build/
+
+# Android
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.ap_
+*.aab
+*.dex
+
+# Java
+*.class
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Local config
+local.properties
+*.keystore
+*.jks
+*.p12
+*.pfx
+
+# Logs
+*.log
+*.hprof
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*~
+._*
+
+# Build artifacts
+bin/
+gen/
+out/
+release/
+proguard/
+
+# Lint
+lint/intermediates/
+lint/generated/
+lint/outputs/
+lint/tmp/
+lint-results*.xml
+lint-results*.html
+
+# Maven
+.mvn/
+mvnw
+mvnw.cmd
+
+# Navigation
+.navigation/

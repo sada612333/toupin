@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投屏接收端 - HTML版</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            padding: 20px;
+        }
+
+        .app-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .app-header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .app-header p {
+            color: #8892b0;
+            font-size: 1.1rem;
+        }
+
+        .main-content {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .video-section {
+                min-height: 250px;
+                /* 移动端：由 JS 根据视频原始尺寸和窗口大小动态设置 */
+                max-width: 100%;  /* 确保不超出容器 */
+            }
+        }
+
+        .video-section {
+            background: #0f172a;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            position: relative;
+            /* 默认手机屏幕比例 9:16 - 便于手机投屏 */
+            min-width: 400px;
+            min-height: 400px;
+            width: 450px;
+            height: 800px;
+            overflow: hidden;  /* 关键：隐藏溢出，避免出现滚动条 */
+            flex-shrink: 0;  /* 防止被 flex 容器压缩 */
+        }
+
+        .video-container {
+            position: relative;
+            background: #000;
+            width: 100%;
+            height: calc(100% - 50px);  /* 预留状态栏高度 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            background: #000;
+            display: block;
+        }
+
+
+
+        .video-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: #64748b;
+        }
+
+        .video-placeholder-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .video-placeholder-text {
+            font-size: 1.2rem;
+        }
+
+        .status-bar {
+            padding: 15px 20px;
+            background: #1e293b;
+            border-top: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #64748b;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: #10b981;
+            animation: pulse-green 2s infinite;
+        }
+
+        .status-dot.connecting {
+            background: #f59e0b;
+            animation: pulse-yellow 2s infinite;
+        }
+
+        .status-dot.error {
+            background: #ef4444;
+            animation: pulse-red 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            50% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+        }
+
+        @keyframes pulse-yellow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            50% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+        }
+
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+        }
+
+        .status-text {
+            font-weight: 500;
+        }
+
+        .connection-time {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+
+        .sidebar {
+            background: #0f172a;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            width: 350px;
+            flex-shrink: 0;  /* 防止被压缩 */
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin-bottom: 12px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .input-group label {
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+
+        .input-group input {
+            padding: 12px 16px;
+            border: 2px solid #334155;
+            border-radius: 10px;
+            background: #1e293b;
+            color: #fff;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #3a7bd5;
+            box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.2);
+        }
+
+        .btn {
+            padding: 14px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3a7bd5, #00d2ff);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(58, 123, 213, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+        }
+
+        .info-card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid #334155;
+        }
+
+        .info-card h4 {
+            font-size: 0.9rem;
+            color: #64748b;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-card p {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #cbd5e1;
+        }
+
+        .logs-container {
+            flex: 1;
+            background: #020617;
+            border-radius: 10px;
+            padding: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+
+        .log-entry {
+            padding: 6px 0;
+            border-bottom: 1px solid #1e293b;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: #64748b;
+            margin-right: 8px;
+        }
+
+        .log-message {
+            color: #cbd5e1;
+        }
+
+        .log-entry.error .log-message {
+            color: #ef4444;
+        }
+
+        .log-entry.success .log-message {
+            color: #10b981;
+        }
+
+        .log-entry.warning .log-message {
+            color: #f59e0b;
+        }
+
+        .quick-connect {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .quick-connect-chip {
+            padding: 6px 12px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: #94a3b8;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .quick-connect-chip:hover {
+            border-color: #3a7bd5;
+            color: #3a7bd5;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .stat-item {
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #3a7bd5;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="app-header">
+            <h1>📺 投屏接收端</h1>
+            <p>连接到发送端，享受流畅的投屏体验</p>
+        </div>
+
+        <div class="main-content">
+            <div class="video-section" id="videoSection">
+                <div class="video-container">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <div class="video-placeholder" id="videoPlaceholder">
+                        <div class="video-placeholder-icon">📹</div>
+                        <div class="video-placeholder-text" id="placeholderText">等待连接...</div>
+                    </div>
+                </div>
+                <div class="status-bar">
+                    <div class="status-indicator">
+                        <div class="status-dot" id="statusDot"></div>
+                        <span class="status-text" id="statusText">未连接</span>
+                    </div>
+                    <div class="connection-time" id="connectionTime"></div>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div>
+                    <div class="section-title">连接设置</div>
+                    <div class="input-group">
+                        <label for="serverAddress">发送端地址</label>
+                        <input 
+                            type="text" 
+                            id="serverAddress" 
+                            placeholder="ws://192.168.1.100:8888"
+                            value="ws://"
+                        >
+                    </div>
+                    <div class="quick-connect" id="quickConnect"></div>
+                </div>
+
+                <button class="btn btn-primary" id="connectBtn">
+                    <span>🔗</span>
+                    <span id="connectBtnText">连接</span>
+                </button>
+
+                <!-- 断开连接按钮移到顶部，和连接按钮在同一区域 -->
+                <button class="btn btn-danger" id="disconnectBtn" style="display: none;">
+                    <span>✕</span>
+                    断开连接
+                </button>
+
+                <div class="stats-grid" id="statsGrid" style="display: none;">
+                    <div class="stat-item">
+                        <div class="stat-value" id="bitrateValue">0</div>
+                        <div class="stat-label" id="bitrateUnit">Kbps</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="framerateValue">0</div>
+                        <div class="stat-label">fps</div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="section-title">连接信息</div>
+                    <div class="info-card">
+                        <h4>连接状态</h4>
+                        <p id="connectionStatus">断开</p>
+                    </div>
+                </div>
+
+                <div style="flex: 1;">
+                    <div class="section-title">日志</div>
+                    <div class="logs-container" id="logsContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局状态
+        let ws = null;
+        let peerConnection = null;
+        let connectionStartTime = null;
+        let connectionTimer = null;
+        let heartbeatInterval = null;
+        let statsInterval = null;
+        let lastStatsBytesReceived = 0;
+        let lastStatsTimestamp = 0;
+        let lastFramesDecoded = 0;  // 新增：上次统计时的累计帧数
+        let lastFramesTimestamp = 0;  // 新增：上次统计帧数时的时间戳
+        let shouldReconnect = true;
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 3;
+
+        // DOM 元素
+        const videoSection = document.getElementById('videoSection');  // 新增
+        const remoteVideo = document.getElementById('remoteVideo');
+        const videoPlaceholder = document.getElementById('videoPlaceholder');
+        const placeholderText = document.getElementById('placeholderText');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const connectionTime = document.getElementById('connectionTime');
+        const serverAddressInput = document.getElementById('serverAddress');
+        const connectBtn = document.getElementById('connectBtn');
+        const connectBtnText = document.getElementById('connectBtnText');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const logsContainer = document.getElementById('logsContainer');
+        const statsGrid = document.getElementById('statsGrid');
+        const bitrateValue = document.getElementById('bitrateValue');
+        const bitrateUnit = document.getElementById('bitrateUnit');
+        const framerateValue = document.getElementById('framerateValue');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const quickConnect = document.getElementById('quickConnect');
+
+        // 初始化常用地址
+        const commonAddresses = [
+            'ws://192.168.1.100:8888',
+            'ws://192.168.1.100:8889',
+            'ws://192.168.0.100:8888',
+            'ws://192.168.31.100:8888',
+            'ws://172.20.10.1:8888'
+        ];
+
+        // 生成快速连接按钮
+        commonAddresses.forEach(addr => {
+            const chip = document.createElement('div');
+            chip.className = 'quick-connect-chip';
+            chip.textContent = addr.replace('ws://', '');
+            chip.addEventListener('click', () => {
+                serverAddressInput.value = addr;
+            });
+            quickConnect.appendChild(chip);
+        });
+
+        // 日志函数
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="log-time">[${time}]</span><span class="log-message">${message}</span>`;
+            logsContainer.insertBefore(entry, logsContainer.firstChild);
+            
+            if (logsContainer.children.length > 100) {
+                logsContainer.removeChild(logsContainer.lastChild);
+            }
+        }
+
+        // 更新状态
+        function updateStatus(status) {
+            statusDot.className = 'status-dot';
+            
+            switch(status) {
+                case 'idle':
+                    statusDot.className = 'status-dot';
+                    statusText.textContent = '未连接';
+                    connectionStatus.textContent = '断开';
+                    break;
+                case 'connecting':
+                    statusDot.className = 'status-dot connecting';
+                    statusText.textContent = '连接中...';
+                    connectionStatus.textContent = '连接中';
+                    break;
+                case 'connected':
+                    statusDot.className = 'status-dot connected';
+                    statusText.textContent = '已连接';
+                    connectionStatus.textContent = '已连接';
+                    break;
+                case 'error':
+                    statusDot.className = 'status-dot error';
+                    statusText.textContent = '连接错误';
+                    connectionStatus.textContent = '错误';
+                    break;
+            }
+        }
+
+        // 更新连接时间
+        function updateConnectionTime() {
+            if (!connectionStartTime) return;
+            
+            const elapsed = Math.floor((Date.now() - connectionStartTime) / 1000);
+            const hours = Math.floor(elapsed / 3600);
+            const minutes = Math.floor((elapsed % 3600) / 60);
+            const seconds = elapsed % 60;
+            
+            let timeStr = '';
+            if (hours > 0) {
+                timeStr = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            } else {
+                timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }
+            
+            connectionTime.textContent = '⏱️ ' + timeStr;
+        }
+
+        // 连接到服务器
+        async function connect() {
+            // 关键修复：检查是否已有 WebSocket 连接，如果有则先清理
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+                log('已存在连接，先断开再重新连接', 'warning');
+                shouldReconnect = false;
+                cleanup();
+                // 等待一小段时间确保旧连接完全关闭
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            const address = serverAddressInput.value.trim();
+
+            if (!address) {
+                log('请输入服务器地址', 'error');
+                return;
+            }
+
+            if (!address.startsWith('ws://') && !address.startsWith('wss://')) {
+                log('地址格式错误，请以 ws:// 或 wss:// 开头', 'error');
+                return;
+            }
+
+            shouldReconnect = true;
+            connectBtn.disabled = true;
+            connectBtnText.textContent = '连接中...';
+            updateStatus('connecting');
+            log(`正在连接到 ${address}...`);
+
+            try {
+                const newWs = new WebSocket(address);
+                ws = newWs;  // 只在创建成功后赋值到全局变量
+
+                newWs.onopen = () => {
+                    // 确认这仍是当前活动的连接
+                    if (newWs !== ws) {
+                        log('忽略过期连接的 onopen 事件', 'warning');
+                        newWs.close();
+                        return;
+                    }
+                    log('WebSocket 连接成功！', 'success');
+                    updateStatus('connected');
+                    reconnectAttempts = 0;  // 连接成功，重置重连计数
+                    startHeartbeat();
+                    connectBtn.style.display = 'none';
+                    disconnectBtn.style.display = 'flex';
+                };
+
+                newWs.onmessage = async (event) => {
+                    if (newWs !== ws) return;  // 忽略过期连接的消息
+                    try {
+                        const message = JSON.parse(event.data);
+                        log(`收到消息: ${message.type}`);
+                        handleSignalingMessage(message);
+                    } catch (e) {
+                        log('解析消息失败: ' + e.message, 'error');
+                    }
+                };
+
+                newWs.onclose = (event) => {
+                    if (newWs !== ws) return;  // 忽略过期连接的关闭事件
+                    log(`WebSocket 连接关闭: ${event.code} ${event.reason}`, 'warning');
+                    cleanup();
+
+                    if (shouldReconnect) {
+                        reconnectAttempts++;
+                        if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+                            log(`3秒后自动重连... (第${reconnectAttempts}次)`, 'warning');
+                            setTimeout(() => {
+                                if (shouldReconnect) connect();
+                            }, 3000);
+                        } else {
+                            log(`重连次数超过限制(${MAX_RECONNECT_ATTEMPTS}次)，停止重连`, 'error');
+                            shouldReconnect = false;
+                        }
+                    }
+                };
+
+                newWs.onerror = (error) => {
+                    if (newWs !== ws) return;  // 忽略过期连接的错误
+                    log('WebSocket 连接错误', 'error');
+                    updateStatus('error');
+                    // 确保连接错误后按钮恢复为可点击
+                    connectBtn.disabled = false;
+                    connectBtnText.textContent = '连接';
+                };
+
+            } catch (e) {
+                log('连接失败: ' + e.message, 'error');
+                updateStatus('error');
+                connectBtn.disabled = false;
+                connectBtnText.textContent = '连接';
+                ws = null;
+            }
+        }
+
+        // 处理信令消息
+        async function handleSignalingMessage(message) {
+            switch (message.type) {
+                case 'offer':
+                    log('收到 SDP Offer', 'success');
+                    await handleOffer(message.payload);
+                    break;
+                case 'ice-candidate':
+                    log('收到 ICE Candidate');
+                    await handleIceCandidate(message.payload);
+                    break;
+                case 'heartbeat-ack':
+                    log('收到心跳响应', 'success');
+                    break;
+                case 'stop':
+                    log('收到停止投屏通知', 'warning');
+                    shouldReconnect = false;
+                    cleanup();
+                    break;
+            }
+        }
+
+        // 处理 Offer
+        async function handleOffer(offer) {
+            try {
+                const config = {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun.qq.com:3478' }
+                    ]
+                };
+
+                peerConnection = new RTCPeerConnection(config);
+
+                peerConnection.ontrack = (event) => {
+                    log('收到远端视频流！', 'success');
+                    remoteVideo.srcObject = event.streams[0];
+                    videoPlaceholder.style.display = 'none';
+                    statsGrid.style.display = 'grid';
+                    startStatsUpdate();
+
+                    // 首次加载：等待视频元数据加载完成后，按比例调整容器尺寸
+                    remoteVideo.addEventListener('loadedmetadata', () => {
+                        adjustVideoSize('首次加载');
+                    }, { once: true });
+
+                    // 关键新增：监听视频尺寸变化（横竖屏切换时 videoWidth/videoHeight 会变化）
+                    // resize 事件在视频 intrinsic size 变化时触发，正好解决横竖屏切换问题
+                    remoteVideo.addEventListener('resize', () => {
+                        adjustVideoSize('横竖屏切换');
+                    });
+                };
+
+                // 根据视频实际比例调整容器尺寸，消除黑边
+                // source 参数用于日志区分是首次加载还是横竖屏切换
+                function adjustVideoSize(source) {
+                    if (!remoteVideo || !remoteVideo.videoWidth || !remoteVideo.videoHeight) {
+                        // 如果视频尺寸还未获取，稍后重试
+                        setTimeout(() => adjustVideoSize(source), 100);
+                        return;
+                    }
+
+                    const videoWidth = remoteVideo.videoWidth;
+                    const videoHeight = remoteVideo.videoHeight;
+                    const statusBarHeight = 50;
+
+                    const sourceText = source ? `（${source}）` : '';
+                    log(`视频原始尺寸${sourceText}: ${videoWidth} × ${videoHeight}`, 'info');
+
+                    // 计算最大可用尺寸（基于浏览器窗口）
+                    const maxWidth = Math.max(400, Math.floor(window.innerWidth * 0.75));
+                    const maxHeight = Math.max(400, Math.floor(window.innerHeight * 0.70));
+
+                    // 先使用视频原始大小
+                    let displayWidth = videoWidth;
+                    let displayHeight = videoHeight;
+
+                    // 如果视频超过窗口限制，按比例缩放
+                    if (displayWidth > maxWidth || displayHeight > maxHeight) {
+                        const scaleRatio = Math.min(
+                            maxWidth / displayWidth,
+                            maxHeight / displayHeight
+                        );
+                        displayWidth = Math.floor(displayWidth * scaleRatio);
+                        displayHeight = Math.floor(displayHeight * scaleRatio);
+                    }
+
+                    // 关键：精确设置容器的宽高
+                    videoSection.style.width = displayWidth + 'px';
+                    videoSection.style.height = (displayHeight + statusBarHeight) + 'px';
+
+                    log(`播放器最终尺寸: ${displayWidth} × ${displayHeight}`, 'success');
+                }
+
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        log('发送 ICE Candidate');
+                        sendSignalingMessage('ice-candidate', {
+                            sdpMid: event.candidate.sdpMid,
+                            sdpMLineIndex: event.candidate.sdpMLineIndex,
+                            candidate: event.candidate.candidate
+                        });
+                    }
+                };
+
+                peerConnection.onconnectionstatechange = () => {
+                    log(`连接状态: ${peerConnection.connectionState}`);
+                    if (peerConnection.connectionState === 'connected') {
+                        connectionStartTime = Date.now();
+                        connectionTimer = setInterval(updateConnectionTime, 1000);
+                    }
+                };
+
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                log('发送 SDP Answer', 'success');
+                sendSignalingMessage('answer', {
+                    sdp: answer.sdp,
+                    type: answer.type
+                });
+
+            } catch (e) {
+                log('处理 Offer 失败: ' + e.message, 'error');
+            }
+        }
+
+        // 处理 ICE Candidate
+        async function handleIceCandidate(candidate) {
+            try {
+                if (peerConnection) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                }
+            } catch (e) {
+                log('添加 ICE Candidate 失败: ' + e.message, 'error');
+            }
+        }
+
+        // 发送信令消息
+        function sendSignalingMessage(type, payload) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type, payload }));
+            }
+        }
+
+        // 更新统计信息（比特率和帧率）
+        async function updateStats() {
+            if (!peerConnection) return;
+
+            try {
+                const stats = await peerConnection.getStats();
+                let bytesReceived = 0;
+                let framesDecoded = 0;
+                let currentTimestamp = 0;
+
+                stats.forEach(report => {
+                    currentTimestamp = report.timestamp;
+                    // inbound-rtp 类型报告包含接收的视频流统计信息
+                    if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                        bytesReceived = report.bytesReceived || 0;
+                        framesDecoded = report.framesDecoded || 0;
+                    }
+                });
+
+                // 功能1：计算比特率，按大写 K/M 展示（Kbps、Mbps）
+                if (lastStatsBytesReceived > 0 && lastStatsTimestamp > 0) {
+                    const timeDiffSeconds = (currentTimestamp - lastStatsTimestamp) / 1000;
+                    if (timeDiffSeconds > 0) {
+                        const bytesDiff = bytesReceived - lastStatsBytesReceived;
+                        const bitrateKbps = (bytesDiff * 8) / timeDiffSeconds / 1000;
+
+                        if (bitrateKbps >= 1000) {
+                            // 大于等于 1000 Kbps，显示为 Mbps
+                            const bitrateMbps = (bitrateKbps / 1000).toFixed(2);
+                            bitrateValue.textContent = bitrateMbps;
+                            bitrateUnit.textContent = 'Mbps';
+                        } else {
+                            // 小于 1000 Kbps，显示为 Kbps
+                            bitrateValue.textContent = Math.round(bitrateKbps).toString();
+                            bitrateUnit.textContent = 'Kbps';
+                        }
+                    }
+                }
+
+                lastStatsBytesReceived = bytesReceived;
+                lastStatsTimestamp = currentTimestamp;
+
+                // 功能2：计算实时帧率（fps）
+                if (lastFramesDecoded > 0 && lastFramesTimestamp > 0) {
+                    const timeDiffSeconds = (currentTimestamp - lastFramesTimestamp) / 1000;
+                    if (timeDiffSeconds > 0) {
+                        const framesDiff = framesDecoded - lastFramesDecoded;
+                        const fps = Math.round(framesDiff / timeDiffSeconds);
+                        framerateValue.textContent = fps.toString();
+                    }
+                }
+
+                lastFramesDecoded = framesDecoded;
+                lastFramesTimestamp = currentTimestamp;
+
+            } catch (e) {
+                // 静默失败，统计信息不是关键功能
+            }
+        }
+
+        // 启动统计信息更新
+        function startStatsUpdate() {
+            if (statsInterval) {
+                clearInterval(statsInterval);
+            }
+            lastStatsBytesReceived = 0;
+            lastStatsTimestamp = 0;
+            lastFramesDecoded = 0;
+            lastFramesTimestamp = 0;
+            // 重置显示值
+            bitrateValue.textContent = '0';
+            bitrateUnit.textContent = 'Kbps';
+            framerateValue.textContent = '0';
+            statsInterval = setInterval(updateStats, 1000);
+        }
+
+        // 心跳
+        function startHeartbeat() {
+            heartbeatInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    sendSignalingMessage('heartbeat', {});
+                }
+            }, 5000);
+        }
+
+        // 清理资源
+        function cleanup() {
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+                heartbeatInterval = null;
+            }
+
+            if (statsInterval) {
+                clearInterval(statsInterval);
+                statsInterval = null;
+            }
+
+            if (connectionTimer) {
+                clearInterval(connectionTimer);
+                connectionTimer = null;
+            }
+
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+
+            remoteVideo.srcObject = null;
+            videoPlaceholder.style.display = 'flex';
+            placeholderText.textContent = '等待连接...';
+            connectionTime.textContent = '';
+            statsGrid.style.display = 'none';
+            connectBtn.disabled = false;
+            connectBtnText.textContent = '连接';
+            connectBtn.style.display = 'flex';
+            disconnectBtn.style.display = 'none';
+            // 重置视频区域到默认大小
+            videoSection.style.height = '';
+            videoSection.style.width = '';
+            updateStatus('idle');
+        }
+
+        // 断开连接
+        function disconnect() {
+            shouldReconnect = false;
+            log('手动断开连接');
+            cleanup();
+        }
+
+        // 事件绑定
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+
+        // 键盘快捷键
+        serverAddressInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                connect();
+            }
+        });
+
+        // 页面卸载时清理
+        window.addEventListener('beforeunload', () => {
+            shouldReconnect = false;
+            cleanup();
+        });
+
+        // 初始状态
+        updateStatus('idle');
+        log('HTML 投屏接收端已就绪，输入地址开始连接');
+        
+        // 尝试从 URL 参数获取地址
+        const urlParams = new URLSearchParams(window.location.search);
+        const prefillAddress = urlParams.get('addr');
+        if (prefillAddress) {
+            serverAddressInput.value = prefillAddress;
+            log(`已预填充地址: ${prefillAddress}`);
+        }
+    </script>
+</body>
+</html>

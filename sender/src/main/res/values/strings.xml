@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">投屏发送端</string>
+    <string name="start_screen_share">开始投屏</string>
+    <string name="stop_screen_share">停止投屏</string>
+    <string name="status_idle">待投屏</string>
+    <string name="status_connecting">正在启动...</string>
+    <string name="status_ready">投屏就绪</string>
+    <string name="status_error">错误</string>
+    <string name="wifi_warning">请连接WiFi网络</string>
+    <string name="waiting_device">等待设备连接...</string>
+    <string name="connected_devices">已连接设备</string>
+    <string name="copy_address">复制地址</string>
+    <string name="copied_to_clipboard">已复制到剪贴板</string>
+    <string name="permission_denied">权限被拒绝</string>
+    <string name="retry">重试</string>
+</resources>
