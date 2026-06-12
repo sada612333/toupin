@@ -33,6 +33,12 @@ class WebSocketSignalingServer(
     var localAddress: String? = null
         private set
 
+    /**
+     * 仅包含 host:port 的展示地址（用于向用户展示 / 复制，不包含协议前缀）。
+     */
+    val displayAddress: String?
+        get() = localAddress?.removePrefix("ws://")?.removePrefix("wss://")
+
     fun start(port: Int = DEFAULT_PORT): Boolean {
         try {
             var actualPort = port

@@ -44,15 +44,16 @@ dependencies {
     implementation("io.getstream:stream-webrtc-android:1.3.10")
     implementation("com.google.code.gson:gson:2.14.0")
     implementation("org.java-websocket:Java-WebSocket:1.5.7")
-    
+
     implementation(platform("androidx.compose:compose-bom:2025.12.00"))
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("com.google.android.material:material:1.13.0")
-    
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

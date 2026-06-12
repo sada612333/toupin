@@ -12,7 +12,9 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
+import android.util.DisplayMetrics
 import android.util.Log
+import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import com.lys.toupin.signaling.SignalingListener
 import com.lys.toupin.signaling.WebSocketSignalingServer
@@ -149,17 +151,60 @@ class ScreenShareService : Service() {
 
         val videoSource: VideoSource = webRTCPeerManager!!.peerConnectionFactory.createVideoSource(false)
 
+        val metrics = getScreenMetrics()
+        val screenWidth = metrics.widthPixels
+        val screenHeight = metrics.heightPixels
+        val isLandscape = screenWidth > screenHeight
+
+        val (captureWidth, captureHeight) = calculateCaptureResolution(screenWidth, screenHeight, isLandscape)
+
+        Log.d(TAG, "Screen: ${screenWidth}x${screenHeight}, Capture: ${captureWidth}x${captureHeight}")
+
         videoCapturer = ScreenCapturerAndroid(mediaProjectionResultData!!, object : MediaProjection.Callback() {
             override fun onStop() {
                 Log.d(TAG, "MediaProjection stopped")
             }
         })
         videoCapturer?.initialize(surfaceTextureHelper, this, videoSource.capturerObserver)
-        videoCapturer?.startCapture(1280, 720, 30)
+        videoCapturer?.startCapture(captureWidth, captureHeight, 30)
 
         videoTrack = webRTCPeerManager!!.peerConnectionFactory.createVideoTrack("video_track", videoSource)
 
         webRTCPeerManager?.setVideoSource(videoTrack!!)
+    }
+
+    private fun getScreenMetrics(): DisplayMetrics {
+        val dm = DisplayMetrics()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val bounds = wm.currentWindowMetrics.bounds
+            dm.widthPixels = bounds.width()
+            dm.heightPixels = bounds.height()
+        } else {
+            @Suppress("DEPRECATION")
+            val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getRealMetrics(dm)
+        }
+        return dm
+    }
+
+    private fun calculateCaptureResolution(screenWidth: Int, screenHeight: Int, isLandscape: Boolean): Pair<Int, Int> {
+        val ratio: Float
+        val baseWidth: Int
+
+        if (isLandscape) {
+            ratio = screenHeight.toFloat() / screenWidth.toFloat()
+            baseWidth = 1920
+        } else {
+            ratio = screenHeight.toFloat() / screenWidth.toFloat()
+            baseWidth = 1080
+        }
+
+        val captureWidth = baseWidth
+        val captureHeight = (baseWidth * ratio).toInt()
+
+        return Pair(captureWidth, captureHeight)
     }
 
 

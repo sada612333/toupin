@@ -12,6 +12,9 @@ class WebRTCPeerManager(
 ) {
     companion object {
         private const val TAG = "WebRTCPeerManager"
+        private const val VIDEO_MAX_BITRATE_BPS = 4_000_000
+        private const val VIDEO_MIN_BITRATE_BPS = 800_000
+        private const val VIDEO_MAX_FRAMERATE = 30
     }
 
     private val peerConnections = ConcurrentHashMap<String, PeerConnection>()
@@ -50,12 +53,17 @@ class WebRTCPeerManager(
     fun createOffer(sessionId: String) {
         try {
             val peerConnection = createPeerConnection(sessionId)
+            val videoSenders = mutableListOf<RtpSender>()
+
             localVideoTrack?.let { track ->
-                peerConnection.addTrack(track, listOf("stream_0"))
+                val sender = peerConnection.addTrack(track, listOf("stream_0"))
+                sender?.let { videoSenders.add(it) }
             }
             localAudioTrack?.let { track ->
                 peerConnection.addTrack(track, listOf("stream_0"))
             }
+
+            setVideoBitrate(videoSenders)
 
             val mediaConstraints = MediaConstraints().apply {
                 mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false"))
@@ -86,6 +94,30 @@ class WebRTCPeerManager(
             }, mediaConstraints)
         } catch (e: Exception) {
             Log.e(TAG, "Error creating offer for $sessionId", e)
+        }
+    }
+
+    private fun setVideoBitrate(senders: List<RtpSender>) {
+        for (sender in senders) {
+            val parameters = sender.parameters ?: continue
+            if (parameters.encodings.isNullOrEmpty()) {
+                Log.w(TAG, "No encodings found for video sender, skipping bitrate config")
+                continue
+            }
+
+            for (encoding in parameters.encodings) {
+                encoding.maxBitrateBps = VIDEO_MAX_BITRATE_BPS
+                encoding.minBitrateBps = VIDEO_MIN_BITRATE_BPS
+                encoding.maxFramerate = VIDEO_MAX_FRAMERATE
+            }
+
+            sender.parameters = parameters
+            Log.d(
+                TAG,
+                "Video bitrate configured: min=${VIDEO_MIN_BITRATE_BPS / 1000}kbps, " +
+                    "max=${VIDEO_MAX_BITRATE_BPS / 1000}kbps, " +
+                    "framerate=${VIDEO_MAX_FRAMERATE}fps"
+            )
         }
     }
 

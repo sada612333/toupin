@@ -18,4 +18,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "toupin"
 include(":sender")
-// include(":receiver") // 暂时注释，等待恢复源代码
+include(":receiver")

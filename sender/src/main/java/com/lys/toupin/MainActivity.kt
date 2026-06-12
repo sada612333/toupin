@@ -333,9 +333,12 @@ fun ColumnScope.ReadyContent(
 ) {
     val context = LocalContext.current
 
-    AddressCard(address = address) {
+    // 仅向用户展示 host:port，去掉协议前缀；复制到剪贴板的也是同一格式
+    val displayAddress = address.removePrefix("ws://").removePrefix("wss://")
+
+    AddressCard(address = displayAddress) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("address", address))
+        clipboard.setPrimaryClip(ClipData.newPlainText("address", displayAddress))
         Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
     }
 
@@ -534,7 +537,7 @@ fun ReadyStateNoDevicesPreview() {
     MaterialTheme {
         ScreenShareScreenPreview(
             state = ScreenShareState.Ready(
-                address = "ws://192.168.1.100:8080",
+                address = "192.168.1.100:8080",
                 connectedDevices = emptyList()
             ),
             isWifiConnected = true
@@ -548,7 +551,7 @@ fun ReadyStateWithDevicesPreview() {
     MaterialTheme {
         ScreenShareScreenPreview(
             state = ScreenShareState.Ready(
-                address = "ws://192.168.1.100:8080",
+                address = "192.168.1.100:8080",
                 connectedDevices = listOf("device-123", "device-456", "device-789")
             ),
             isWifiConnected = true
