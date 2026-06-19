@@ -38,6 +38,24 @@ android {
     buildFeatures {
         compose = true
     }
+
+    lint {
+        disable += listOf(
+            // androidx.lifecycle 与 Kotlin 2.0 Analysis API 不兼容的规则
+            "NullSafeMutableLiveData",
+            // androidx.compose.runtime 与 Kotlin 2.0 Analysis API 不兼容的规则
+            "AutoboxingStateCreation",
+            "RememberInComposition",
+            "FrequentlyChangingValue",
+            "UnrememberedMutableState",
+            "ComposableOpenTarget",
+            "ComposableLambdaParameterPosition",
+            "ComposableNaming",
+            "StateFlowValueCalledInComposition",
+            "ProduceStateDoesNotAssignValue",
+            "SuspendingCompositionParameter",
+        )
+    }
 }
 
 dependencies {

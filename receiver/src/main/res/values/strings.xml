@@ -1,23 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">投屏接收端</string>
+
+    <!-- 标题与按钮 -->
+    <string name="title_receiver">投屏接收端</string>
     <string name="connect">连接</string>
     <string name="cancel">取消</string>
-    <string name="disconnect">断开连接</string>
-    <string name="input_address">请输入Sender地址</string>
-    <string name="address_hint">如：192.168.1.100:8888 或 ws://192.168.1.100:8888</string>
+    <string name="disconnect">断开</string>
+
+    <!-- 地址输入 -->
+    <string name="input_address">请输入 Sender 地址</string>
+    <string name="address_hint">192.168.1.100:8888</string>
     <string name="status_idle">未连接</string>
-    <string name="status_listening">正在连接...</string>
-    <string name="status_connecting">正在协商...</string>
+    <string name="status_listening">正在连接…</string>
+    <string name="status_connecting">正在协商…</string>
     <string name="status_connected">已连接</string>
-    <string name="reconnecting">重连中（第 %1$d 次）</string>
+    <string name="reconnecting">重连中（第 %1$d 次）…</string>
+    <string name="connected_to">已连接到 %1$s</string>
+
+    <!-- 历史连接 -->
+    <string name="connection_history">历史连接</string>
+    <string name="connection_history_tip">历史连接（点击填入）</string>
+    <string name="tap_to_use">点击快速填入</string>
+    <string name="clear_history">清空</string>
+
+    <!-- 发送端停止对话框 -->
     <string name="sender_stopped">发送端已停止投屏</string>
+    <string name="sender_stopped_message">发送端已主动停止投屏，连接已终止。</string>
     <string name="confirm">确定</string>
-    <string name="cancel_reconnect">取消重连</string>
+
+    <!-- 错误 -->
     <string name="error_connect_failed">无法连接到该地址，请检查网络或地址</string>
     <string name="error_address_invalid">请输入有效的地址</string>
-    <string name="connection_history">历史连接</string>
-    <string name="tap_to_use">点击快速填入</string>
-    <string name="connected_to">已连接到：</string>
-    <string name="show_controls">显示控制</string>
-    <string name="hide_controls">隐藏控制</string>
+
+    <!-- 无障碍内容描述 -->
+    <string name="cd_icon_close">关闭</string>
+    <string name="cd_icon_wifi_off">无网络</string>
+    <string name="cd_icon_video">视频</string>
 </resources>

@@ -17,7 +17,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,7 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Error
@@ -37,10 +36,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,13 +52,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 class MainActivity : ComponentActivity() {
@@ -81,36 +78,57 @@ class MainActivity : ComponentActivity() {
         viewModel.setMediaProjectionLauncher(mediaProjectionLauncher)
 
         setContent {
-            MaterialTheme {
-                ScreenShareScreen(viewModel)
+            ToupinTheme {
+                val state by viewModel.state.collectAsStateWithLifecycle()
+                val isWifiConnected by collectIsOnWifiState()
+
+                ScreenShareScreen(
+                    state = state,
+                    isWifiConnected = isWifiConnected,
+                    onStart = { viewModel.startScreenShare(this@MainActivity) },
+                    onStop = { viewModel.stopScreenShare(this@MainActivity) },
+                    onRetry = { viewModel.startScreenShare(this@MainActivity) },
+                    onForceStartWithoutWifi = { viewModel.startScreenShare(this@MainActivity) },
+                )
             }
         }
     }
 }
 
+/**
+ * 投屏发送端主界面（无状态）。
+ *
+ * - 所有颜色通过 [MaterialTheme.colorScheme] 获取
+ * - 所有字号通过 [MaterialTheme.typography] 获取
+ * - 所有文案通过 [stringResource] 获取
+ * - 所有圆角通过 [MaterialTheme.shapes] 获取
+ */
 @Composable
-fun ScreenShareScreen(viewModel: ScreenShareViewModel) {
-    val context = LocalContext.current
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val isWifiConnected by collectIsOnWifiState(context)
-    var showNoWifiConfirmDialog by remember { mutableStateOf(false) }
+fun ScreenShareScreen(
+    state: ScreenShareState,
+    isWifiConnected: Boolean,
+    onStart: () -> Unit = {},
+    onStop: () -> Unit = {},
+    onRetry: () -> Unit = {},
+    onForceStartWithoutWifi: () -> Unit = {},
+) {
+    var showNoWifiConfirmDialog by remember(state) { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = MaterialTheme.colorScheme.background,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "投屏发送端",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
+                text = stringResource(R.string.title_screen_cast),
+                style = MaterialTheme.typography.headlineMedium,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -126,37 +144,30 @@ fun ScreenShareScreen(viewModel: ScreenShareViewModel) {
             when (state) {
                 is ScreenShareState.Idle -> {
                     IdleContent(
-                        onStart = {
-                            if (isWifiConnected) {
-                                viewModel.startScreenShare(context as ComponentActivity)
-                            } else {
-                                showNoWifiConfirmDialog = true
-                            }
-                        }
+                        isWifiConnected = isWifiConnected,
+                        onStart = onStart,
+                        onRequestNoWifiDialog = { showNoWifiConfirmDialog = true },
                     )
                 }
+
                 is ScreenShareState.Connecting -> {
                     ConnectingContent()
                 }
+
                 is ScreenShareState.Ready -> {
-                    val readyState = state as ScreenShareState.Ready
                     ReadyContent(
-                        address = readyState.address,
-                        connectedDevices = readyState.connectedDevices,
-                        onStop = { viewModel.stopScreenShare(context) }
+                        address = state.address,
+                        connectedDevices = state.connectedDevices,
+                        onStop = onStop,
                     )
                 }
+
                 is ScreenShareState.Error -> {
-                    val errorState = state as ScreenShareState.Error
                     ErrorContent(
-                        message = errorState.message,
-                        onRetry = {
-                            if (isWifiConnected) {
-                                viewModel.startScreenShare(context as ComponentActivity)
-                            } else {
-                                showNoWifiConfirmDialog = true
-                            }
-                        }
+                        message = state.message,
+                        isWifiConnected = isWifiConnected,
+                        onRetry = onRetry,
+                        onRequestNoWifiDialog = { showNoWifiConfirmDialog = true },
                     )
                 }
             }
@@ -167,26 +178,24 @@ fun ScreenShareScreen(viewModel: ScreenShareViewModel) {
         NoWifiConfirmDialog(
             onConfirm = {
                 showNoWifiConfirmDialog = false
-                viewModel.startScreenShare(context as ComponentActivity)
+                onForceStartWithoutWifi()
             },
-            onDismiss = {
-                showNoWifiConfirmDialog = false
-            }
+            onDismiss = { showNoWifiConfirmDialog = false },
         )
     }
 }
 
 @Composable
-fun collectIsOnWifiState(context: Context): State<Boolean> {
-    return produceState(initialValue = isOnWifi(context)) {
-        val connectivityManager =
-            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-
-        val networkRequest = NetworkRequest.Builder()
+private fun collectIsOnWifiState(
+    context: Context = LocalContext.current,
+): State<Boolean> {
+    return produceState(initialValue = isOnWifi(context), key1 = context) {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val request = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .build()
 
-        val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 value = true
             }
@@ -197,149 +206,163 @@ fun collectIsOnWifiState(context: Context): State<Boolean> {
 
             override fun onCapabilitiesChanged(
                 network: Network,
-                networkCapabilities: NetworkCapabilities
+                networkCapabilities: NetworkCapabilities,
             ) {
                 value = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
             }
         }
 
-        connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
+        cm.registerNetworkCallback(request, callback)
 
-        awaitDispose {
-            connectivityManager.unregisterNetworkCallback(networkCallback)
-        }
+        awaitDispose { cm.unregisterNetworkCallback(callback) }
     }
 }
 
 @Composable
-fun NoWifiConfirmDialog(
+private fun NoWifiConfirmDialog(
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     AlertDialog(
-        containerColor = Color.White,
         onDismissRequest = onDismiss,
         icon = {
             Icon(
                 imageVector = Icons.Default.Warning,
-                contentDescription = null,
-                tint = Color(0xFFFF9800),
-                modifier = Modifier.size(48.dp)
+                contentDescription = stringResource(R.string.cd_icon_warning),
+                tint = MaterialTheme.colorScheme.tertiary,
             )
         },
-        title = {
-            Text(text = "未连接 WiFi")
-        },
-        text = {
-            Text(
-                text = "当前未连接 WiFi 网络，投屏效果可能不稳定（需要在同一局域网内才能接收）。\n\n是否仍要继续？"
-            )
-        },
+        title = { Text(stringResource(R.string.wifi_dialog_title)) },
+        text = { Text(stringResource(R.string.wifi_dialog_message)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("继续投屏", color = Color(0xFFFF9800))
+                Text(stringResource(R.string.wifi_dialog_continue))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(R.string.wifi_dialog_cancel))
             }
         },
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true
-        )
     )
 }
 
 @Composable
-fun WarningBanner() {
+private fun WarningBanner() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD)),
-        shape = RoundedCornerShape(8.dp)
+        shape = MaterialTheme.shapes.small,
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+        ),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 imageVector = Icons.Default.Warning,
-                contentDescription = null,
-                tint = Color(0xFFFF9800)
+                contentDescription = stringResource(R.string.cd_icon_warning),
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "请连接WiFi网络",
-                color = Color(0xFFF57C00)
+                text = stringResource(R.string.wifi_warning),
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
     }
 }
 
 @Composable
-fun StatusIndicator(state: ScreenShareState) {
-    val (color, text) = when (state) {
-        is ScreenShareState.Idle -> Color(0xFF9E9E9E) to "待投屏"
-        is ScreenShareState.Connecting -> Color(0xFFFF9800) to "正在启动..."
-        is ScreenShareState.Ready -> Color(0xFF4CAF50) to "投屏就绪"
-        is ScreenShareState.Error -> Color(0xFFF44336) to "错误"
+private fun StatusIndicator(state: ScreenShareState) {
+    val color = when (state) {
+        is ScreenShareState.Idle -> MaterialTheme.colorScheme.onSurfaceVariant
+        is ScreenShareState.Connecting -> MaterialTheme.colorScheme.tertiary
+        is ScreenShareState.Ready -> MaterialTheme.colorScheme.primary
+        is ScreenShareState.Error -> MaterialTheme.colorScheme.error
+    }
+    val textRes = when (state) {
+        is ScreenShareState.Idle -> R.string.status_idle
+        is ScreenShareState.Connecting -> R.string.status_connecting
+        is ScreenShareState.Ready -> R.string.status_ready
+        is ScreenShareState.Error -> R.string.status_error
     }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+        horizontalArrangement = Arrangement.Center,
     ) {
         Box(
             modifier = Modifier
                 .size(12.dp)
-                .background(color, RoundedCornerShape(50))
+                .clip(CircleShape)
+                .background(color),
         )
         Spacer(modifier = Modifier.width(8.dp))
-        Text(text = text, fontSize = 16.sp)
+        Text(
+            text = stringResource(textRes),
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
 @Composable
-fun ColumnScope.IdleContent(onStart: () -> Unit) {
-    Spacer(modifier = Modifier.weight(1f))
-    Button(
-        onClick = onStart,
+private fun IdleContent(
+    isWifiConnected: Boolean,
+    onStart: () -> Unit,
+    onRequestNoWifiDialog: () -> Unit,
+) {
+    Spacer(modifier = Modifier.height(16.dp))
+    OutlinedButton(
+        onClick = {
+            if (isWifiConnected) onStart() else onRequestNoWifiDialog()
+        },
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp),
-        shape = RoundedCornerShape(12.dp)
+        shape = MaterialTheme.shapes.medium,
     ) {
-        Text(text = "开始投屏", fontSize = 18.sp)
+        Text(
+            text = stringResource(R.string.start_screen_share),
+            style = MaterialTheme.typography.titleMedium,
+        )
     }
 }
 
 @Composable
-fun ColumnScope.ConnectingContent() {
-    Spacer(modifier = Modifier.weight(1f))
+private fun ConnectingContent() {
+    Spacer(modifier = Modifier.height(16.dp))
     CircularProgressIndicator()
     Spacer(modifier = Modifier.height(16.dp))
-    Text(text = "正在启动投屏服务...")
-    Spacer(modifier = Modifier.weight(1f))
+    Text(
+        text = stringResource(R.string.status_connecting),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
-fun ColumnScope.ReadyContent(
+private fun ReadyContent(
     address: String,
     connectedDevices: List<String>,
-    onStop: () -> Unit
+    onStop: () -> Unit,
 ) {
     val context = LocalContext.current
-
-    // 仅向用户展示 host:port，去掉协议前缀；复制到剪贴板的也是同一格式
     val displayAddress = address.removePrefix("ws://").removePrefix("wss://")
+    val copiedText = stringResource(R.string.copied_to_clipboard)
 
     AddressCard(address = displayAddress) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("address", displayAddress))
-        Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            context,
+            copiedText,
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     Spacer(modifier = Modifier.height(24.dp))
@@ -350,51 +373,58 @@ fun ColumnScope.ReadyContent(
         ConnectedDevicesList(devices = connectedDevices)
     }
 
-    Spacer(modifier = Modifier.weight(1f))
+    Spacer(modifier = Modifier.height(24.dp))
 
-    Button(
+    OutlinedButton(
         onClick = onStop,
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336)),
-        shape = RoundedCornerShape(12.dp)
+        shape = MaterialTheme.shapes.medium,
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.error,
+        ),
     ) {
-        Text(text = "停止投屏", fontSize = 18.sp)
+        Text(
+            text = stringResource(R.string.stop_screen_share),
+            style = MaterialTheme.typography.titleMedium,
+        )
     }
 }
 
 @Composable
-fun AddressCard(address: String, onCopy: () -> Unit) {
+private fun AddressCard(address: String, onCopy: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        shape = RoundedCornerShape(12.dp)
+        shape = MaterialTheme.shapes.medium,
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
         ) {
             Text(
-                text = "投屏地址",
+                text = stringResource(R.string.address_label),
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = address,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 TextButton(onClick = onCopy) {
-                    Text("复制")
+                    Text(stringResource(R.string.copy_address))
                 }
             }
         }
@@ -402,48 +432,51 @@ fun AddressCard(address: String, onCopy: () -> Unit) {
 }
 
 @Composable
-fun EmptyDevicesContent() {
+private fun EmptyDevicesContent() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
             imageVector = Icons.Default.Devices,
-            contentDescription = null,
-            tint = Color(0xFF9E9E9E),
-            modifier = Modifier.size(48.dp)
+            contentDescription = stringResource(R.string.cd_icon_devices),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(48.dp),
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "等待设备连接...",
-            color = Color(0xFF757575)
+            text = stringResource(R.string.waiting_device),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
         )
     }
 }
 
 @Composable
-fun ConnectedDevicesList(devices: List<String>) {
+private fun ConnectedDevicesList(devices: List<String>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(12.dp)
+        shape = MaterialTheme.shapes.medium,
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
         ) {
             Text(
-                text = "已连接设备",
-                style = MaterialTheme.typography.titleSmall
+                text = stringResource(R.string.connected_devices),
+                style = MaterialTheme.typography.titleSmall,
             )
             Spacer(modifier = Modifier.height(8.dp))
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(devices) { device ->
+                items(devices, key = { it }) { device ->
                     DeviceItem(device)
                 }
             }
@@ -452,189 +485,149 @@ fun ConnectedDevicesList(devices: List<String>) {
 }
 
 @Composable
-fun DeviceItem(deviceId: String) {
+private fun DeviceItem(deviceId: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+            .background(
+                color = MaterialTheme.colorScheme.surface,
+                shape = MaterialTheme.shapes.small,
+            )
             .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
                 .size(8.dp)
-                .background(Color(0xFF4CAF50), RoundedCornerShape(50))
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = deviceId,
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
         )
     }
 }
 
 @Composable
-fun ColumnScope.ErrorContent(message: String, onRetry: () -> Unit) {
-    Spacer(modifier = Modifier.weight(1f))
+private fun ErrorContent(
+    message: String,
+    isWifiConnected: Boolean,
+    onRetry: () -> Unit,
+    onRequestNoWifiDialog: () -> Unit,
+) {
+    Spacer(modifier = Modifier.height(16.dp))
     Icon(
         imageVector = Icons.Default.Error,
-        contentDescription = null,
-        tint = Color(0xFFF44336),
-        modifier = Modifier.size(48.dp)
+        contentDescription = stringResource(R.string.cd_icon_error),
+        tint = MaterialTheme.colorScheme.error,
+        modifier = Modifier.size(48.dp),
     )
     Spacer(modifier = Modifier.height(16.dp))
     Text(
         text = message,
-        color = Color(0xFFF44336),
-        fontSize = 16.sp
+        color = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = Modifier
+            .background(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = MaterialTheme.shapes.small,
+            )
+            .padding(12.dp),
+        style = MaterialTheme.typography.bodyMedium,
     )
     Spacer(modifier = Modifier.height(24.dp))
     Button(
-        onClick = onRetry,
+        onClick = { if (isWifiConnected) onRetry() else onRequestNoWifiDialog() },
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp),
-        shape = RoundedCornerShape(12.dp)
+        shape = MaterialTheme.shapes.medium,
     ) {
-        Text(text = "重试", fontSize = 18.sp)
-    }
-    Spacer(modifier = Modifier.weight(1f))
-}
-
-fun isOnWifi(context: Context): Boolean {
-    val connectivityManager =
-        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    val network = connectivityManager.activeNetwork ?: return false
-    val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-    return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-}
-
-@Preview(showBackground = true, name = "Idle State")
-@Composable
-fun IdleStatePreview() {
-    MaterialTheme {
-        ScreenShareScreenPreview(
-            state = ScreenShareState.Idle,
-            isWifiConnected = true
+        Text(
+            text = stringResource(R.string.retry),
+            style = MaterialTheme.typography.titleMedium,
         )
     }
 }
 
-@Preview(showBackground = true, name = "Connecting State")
+private fun isOnWifi(context: Context): Boolean {
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val network = cm.activeNetwork ?: return false
+    val caps = cm.getNetworkCapabilities(network) ?: return false
+    return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+}
+
+// ================= Previews =================
+
+@Preview(showBackground = true, name = "Idle")
 @Composable
-fun ConnectingStatePreview() {
-    MaterialTheme {
-        ScreenShareScreenPreview(
+private fun IdleStatePreview() {
+    ToupinTheme {
+        ScreenShareScreen(
+            state = ScreenShareState.Idle,
+            isWifiConnected = true,
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Idle / No Wifi")
+@Composable
+private fun IdleNoWifiPreview() {
+    ToupinTheme {
+        ScreenShareScreen(
+            state = ScreenShareState.Idle,
+            isWifiConnected = false,
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Connecting")
+@Composable
+private fun ConnectingStatePreview() {
+    ToupinTheme {
+        ScreenShareScreen(
             state = ScreenShareState.Connecting,
-            isWifiConnected = true
+            isWifiConnected = true,
         )
     }
 }
 
-@Preview(showBackground = true, name = "Ready State - No Devices")
+@Preview(showBackground = true, name = "Ready / No Devices")
 @Composable
-fun ReadyStateNoDevicesPreview() {
-    MaterialTheme {
-        ScreenShareScreenPreview(
+private fun ReadyNoDevicesPreview() {
+    ToupinTheme {
+        ScreenShareScreen(
             state = ScreenShareState.Ready(
                 address = "192.168.1.100:8080",
-                connectedDevices = emptyList()
+                connectedDevices = emptyList(),
             ),
-            isWifiConnected = true
+            isWifiConnected = true,
         )
     }
 }
 
-@Preview(showBackground = true, name = "Ready State - With Devices")
+@Preview(showBackground = true, name = "Ready / With Devices")
 @Composable
-fun ReadyStateWithDevicesPreview() {
-    MaterialTheme {
-        ScreenShareScreenPreview(
+private fun ReadyWithDevicesPreview() {
+    ToupinTheme {
+        ScreenShareScreen(
             state = ScreenShareState.Ready(
                 address = "192.168.1.100:8080",
-                connectedDevices = listOf("device-123", "device-456", "device-789")
+                connectedDevices = listOf("device-123", "device-456", "device-789"),
             ),
-            isWifiConnected = true
+            isWifiConnected = true,
         )
     }
 }
 
-@Preview(showBackground = true, name = "Error State")
+@Preview(showBackground = true, name = "Error")
 @Composable
-fun ErrorStatePreview() {
-    MaterialTheme {
-        ScreenShareScreenPreview(
-            state = ScreenShareState.Error("网络连接失败，请检查WiFi"),
-            isWifiConnected = false
+private fun ErrorStatePreview() {
+    ToupinTheme {
+        ScreenShareScreen(
+            state = ScreenShareState.Error("权限被拒绝"),
+            isWifiConnected = false,
         )
-    }
-}
-
-@Preview(showBackground = true, name = "No WiFi Warning")
-@Composable
-fun NoWifiWarningPreview() {
-    MaterialTheme {
-        ScreenShareScreenPreview(
-            state = ScreenShareState.Idle,
-            isWifiConnected = false
-        )
-    }
-}
-
-@Composable
-fun ScreenShareScreenPreview(
-    state: ScreenShareState,
-    isWifiConnected: Boolean
-) {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "投屏发送端",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (!isWifiConnected) {
-                WarningBanner()
-            }
-
-            StatusIndicator(state)
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            when (state) {
-                is ScreenShareState.Idle -> {
-                    IdleContent(onStart = {})
-                }
-                is ScreenShareState.Connecting -> {
-                    ConnectingContent()
-                }
-                is ScreenShareState.Ready -> {
-                    ReadyContent(
-                        address = state.address,
-                        connectedDevices = state.connectedDevices,
-                        onStop = {}
-                    )
-                }
-                is ScreenShareState.Error -> {
-                    ErrorContent(
-                        message = state.message,
-                        onRetry = {}
-                    )
-                }
-            }
-        }
     }
 }

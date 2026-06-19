@@ -1,16 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">投屏发送端</string>
+
+    <!-- 标题与状态 -->
+    <string name="title_screen_cast">投屏发送端</string>
     <string name="start_screen_share">开始投屏</string>
     <string name="stop_screen_share">停止投屏</string>
+    <string name="retry">重试</string>
+
     <string name="status_idle">待投屏</string>
-    <string name="status_connecting">正在启动...</string>
+    <string name="status_connecting">正在启动投屏服务…</string>
     <string name="status_ready">投屏就绪</string>
     <string name="status_error">错误</string>
+
+    <!-- WiFi / 连接提示 -->
     <string name="wifi_warning">请连接WiFi网络</string>
-    <string name="waiting_device">等待设备连接...</string>
-    <string name="connected_devices">已连接设备</string>
-    <string name="copy_address">复制地址</string>
+    <string name="wifi_dialog_title">未连接 WiFi</string>
+    <string name="wifi_dialog_message">当前未连接 WiFi 网络，投屏效果可能不稳定（需要在同一局域网内才能接收）。\n\n是否仍要继续？</string>
+    <string name="wifi_dialog_continue">继续投屏</string>
+    <string name="wifi_dialog_cancel">取消</string>
+
+    <!-- 地址 / 设备 -->
+    <string name="address_label">投屏地址</string>
+    <string name="copy_address">复制</string>
     <string name="copied_to_clipboard">已复制到剪贴板</string>
+    <string name="waiting_device">等待设备连接…</string>
+    <string name="connected_devices">已连接设备</string>
+
+    <!-- 权限 / 错误 -->
     <string name="permission_denied">权限被拒绝</string>
-    <string name="retry">重试</string>
+
+    <!-- 内容描述（无障碍） -->
+    <string name="cd_icon_warning">警告</string>
+    <string name="cd_icon_error">错误</string>
+    <string name="cd_icon_devices">设备</string>
+    <string name="cd_action_remove">删除</string>
 </resources>
