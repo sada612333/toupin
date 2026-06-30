@@ -11,8 +11,10 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,6 +66,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val mediaProjectionLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
@@ -112,10 +116,24 @@ fun ScreenShareScreen(
     onRetry: () -> Unit = {},
     onForceStartWithoutWifi: () -> Unit = {},
 ) {
+    var topInsetDp by remember { mutableStateOf(0.dp) }
     var showNoWifiConfirmDialog by remember(state) { mutableStateOf(false) }
+    val view = androidx.compose.ui.platform.LocalView.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.runtime.DisposableEffect(view, density) {
+        val listener = android.view.View.OnApplyWindowInsetsListener { v, insets ->
+            val systemBars = insets.getInsets(android.view.WindowInsets.Type.systemBars())
+            topInsetDp = with(density) { systemBars.top.toDp() }
+            v.onApplyWindowInsets(insets)
+        }
+        view.setOnApplyWindowInsetsListener(listener)
+        onDispose { view.setOnApplyWindowInsetsListener(null) }
+    }
 
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = topInsetDp),
         color = MaterialTheme.colorScheme.background,
     ) {
         Column(
@@ -537,7 +555,7 @@ private fun ErrorContent(
         style = MaterialTheme.typography.bodyMedium,
     )
     Spacer(modifier = Modifier.height(24.dp))
-    Button(
+    OutlinedButton(
         onClick = { if (isWifiConnected) onRetry() else onRequestNoWifiDialog() },
         modifier = Modifier
             .fillMaxWidth()

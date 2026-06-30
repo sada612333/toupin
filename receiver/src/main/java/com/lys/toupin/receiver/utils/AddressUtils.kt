@@ -43,15 +43,33 @@ object AddressUtils {
             )
         }
 
-        val lastColon = trimmed.lastIndexOf(':')
-        if (lastColon < 0) {
-            return Result.failure(
-                IllegalArgumentException("缺少端口，格式应为 host:port，例如 192.168.1.100:8888")
-            )
+        // IPv6 地址格式：[::1]:8080 或 [2001:db8::1]:8080
+        val host: String
+        val portPart: String
+        if (trimmed.startsWith("[")) {
+            val bracketEnd = trimmed.indexOf(']')
+            if (bracketEnd < 0) {
+                return Result.failure(
+                    IllegalArgumentException("IPv6 地址格式错误，缺少 ']'，例如 [::1]:8080")
+                )
+            }
+            host = trimmed.substring(0, bracketEnd + 1)
+            if (bracketEnd + 1 >= trimmed.length || trimmed[bracketEnd + 1] != ':') {
+                return Result.failure(
+                    IllegalArgumentException("缺少端口，格式应为 [IPv6]:port，例如 [::1]:8080")
+                )
+            }
+            portPart = trimmed.substring(bracketEnd + 2)
+        } else {
+            val lastColon = trimmed.lastIndexOf(':')
+            if (lastColon < 0) {
+                return Result.failure(
+                    IllegalArgumentException("缺少端口，格式应为 host:port，例如 192.168.1.100:8888")
+                )
+            }
+            host = trimmed.substring(0, lastColon)
+            portPart = trimmed.substring(lastColon + 1)
         }
-
-        val host = trimmed.substring(0, lastColon)
-        val portPart = trimmed.substring(lastColon + 1)
 
         if (host.isEmpty()) return Result.failure(IllegalArgumentException("主机名不能为空"))
         if (portPart.isEmpty()) return Result.failure(IllegalArgumentException("端口不能为空"))
@@ -69,6 +87,22 @@ object AddressUtils {
 
     /** 仅校验 host，返回错误消息或 null。 */
     private fun validateHost(host: String): Result<Unit> {
+        // IPv6 地址格式：[::1] 或 [2001:db8::1]
+        if (host.startsWith("[")) {
+            if (!host.endsWith("]")) {
+                return Result.failure(IllegalArgumentException("IPv6 地址格式错误，缺少 ']'"))
+            }
+            val ipPart = host.substring(1, host.length - 1)
+            // 简单校验：IPv6 部分只允许十六进制和 :
+            if (ipPart.isEmpty()) {
+                return Result.failure(IllegalArgumentException("IPv6 地址不能为空"))
+            }
+            if (!ipPart.all { it.isDigit() || it in "abcdefABCDEF" || it == ':' }) {
+                return Result.failure(IllegalArgumentException("IPv6 地址含有非法字符"))
+            }
+            return Result.success(Unit)
+        }
+
         // IPv4
         val ipv4Segments = host.split('.')
         if (ipv4Segments.size == 4 && ipv4Segments.all { it.all(Char::isDigit) }) {

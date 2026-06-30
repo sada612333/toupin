@@ -1,17 +1,21 @@
 package com.lys.toupin
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -19,81 +23,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 // ===== Color Schemes =====
-// 仅在一处硬编码品牌色，UI 中应当通过 MaterialTheme.colorScheme.* 获取语义化颜色。
+// 仅覆盖关键 token；其余由 Material3 自动派生，以保证 onXxx / xxxContainer 对比度与品牌色联动。
 private val LightColorScheme = lightColorScheme(
     primary = Color(0xFF1976D2),
-    onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFD6E4FF),
-    onPrimaryContainer = Color(0xFF001F38),
-
     secondary = Color(0xFF5C6BC0),
-    onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFDDE0FF),
-    onSecondaryContainer = Color(0xFF141B3C),
-
     tertiary = Color(0xFFFF9800),
-    onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFFFFE0B2),
-    onTertiaryContainer = Color(0xFF2E1200),
-
-    error = Color(0xFFD32F2F),
-    onError = Color(0xFFFFFFFF),
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002),
-
-    background = Color(0xFFF7F9FC),
-    onBackground = Color(0xFF1A1C1E),
-
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF1A1C1E),
-    surfaceVariant = Color(0xFFE7E9EF),
-    onSurfaceVariant = Color(0xFF44474E),
-    surfaceTint = Color(0xFF1976D2),
-
-    outline = Color(0xFF74777F),
-    outlineVariant = Color(0xFFC4C6D0),
-    scrim = Color(0x88000000),
-    inverseSurface = Color(0xFF2F3033),
-    inverseOnSurface = Color(0xFFF1F0F4),
-    inversePrimary = Color(0xFFA6C8FF),
 )
 
 private val DarkColorScheme = darkColorScheme(
     primary = Color(0xFFA6C8FF),
-    onPrimary = Color(0xFF00325F),
-    primaryContainer = Color(0xFF004A8C),
-    onPrimaryContainer = Color(0xFFD6E4FF),
-
     secondary = Color(0xFFBBC3FF),
-    onSecondary = Color(0xFF293057),
-    secondaryContainer = Color(0xFF41487D),
-    onSecondaryContainer = Color(0xFFDDE0FF),
-
     tertiary = Color(0xFFFFB866),
-    onTertiary = Color(0xFF4A2500),
-    tertiaryContainer = Color(0xFF6B3800),
-    onTertiaryContainer = Color(0xFFFFE0B2),
-
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFFDAD6),
-
-    background = Color(0xFF1A1C1E),
-    onBackground = Color(0xFFE3E2E6),
-
-    surface = Color(0xFF1A1C1E),
-    onSurface = Color(0xFFE3E2E6),
-    surfaceVariant = Color(0xFF44474E),
-    onSurfaceVariant = Color(0xFFC4C6D0),
-    surfaceTint = Color(0xFFA6C8FF),
-
-    outline = Color(0xFF8E9099),
-    outlineVariant = Color(0xFF44474E),
-    scrim = Color(0x88000000),
-    inverseSurface = Color(0xFFE3E2E6),
-    inverseOnSurface = Color(0xFF2F3033),
-    inversePrimary = Color(0xFF1976D2),
 )
 
 // ===== Typography =====
@@ -230,7 +170,15 @@ fun ToupinTheme(
     useDarkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    val colors = if (useDarkTheme) DarkColorScheme else LightColorScheme
+    val context = LocalContext.current
+    val colors = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            if (useDarkTheme) dynamicDarkColorScheme(context)
+            else dynamicLightColorScheme(context)
+        }
+        useDarkTheme -> DarkColorScheme
+        else -> LightColorScheme
+    }
     CompositionLocalProvider(LocalAdaptiveDimens provides provideAdaptiveDimens()) {
         MaterialTheme(
             colorScheme = colors,
