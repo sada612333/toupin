@@ -4,6 +4,7 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+
 }
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "0.10.0"
@@ -17,5 +18,8 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "toupin"
-include(":sender")
-include(":receiver")
+include(":sender-app")
+project(":sender-app").projectDir = file("sender")
+
+include(":receiver-app")
+project(":receiver-app").projectDir = file("receiver")
